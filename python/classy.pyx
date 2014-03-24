@@ -744,7 +744,7 @@ cdef class Class:
                 data.mcmc_parameters[elem]['current'] = self.ba.h
             elif elem == 'Omega0_lambda' or elem == 'Omega_Lambda':
                 data.mcmc_parameters[elem]['current'] = self.ba.Omega0_lambda
-            elif elem == 'Omega0_fld':
+            elif elem == 'Omega0_fld' or elem == 'Omega_fld':
                 data.mcmc_parameters[elem]['current'] = self.ba.Omega0_fld
             elif elem == 'age':
                 data.mcmc_parameters[elem]['current'] = self.ba.age
