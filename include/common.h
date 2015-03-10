@@ -15,7 +15,7 @@
 #ifndef __COMMON__
 #define __COMMON__
 
-#define _VERSION_ "v2.2.0"
+#define _VERSION_ "v2.4.3"
 
 #define _TRUE_ 1 /**< integer associated to true statement */
 #define _FALSE_ 0 /**< integer associated to false statement */
@@ -35,6 +35,8 @@ typedef char FileName[_FILENAMESIZE_];
 
 #define _TWOPI_ 6.283185307179586476925286766559e0 /**< 2 times pi */
 
+#define _SQRT2_ 1.41421356237309504880168872421e0 /** < square root of 2. */
+
 #define _SQRT6_ 2.4494897427831780981972840747059e0 /**< square root of 6. */
 
 #define _SQRT_PI_ 1.77245385090551602729816748334e0 /**< square root of pi. */
@@ -53,6 +55,12 @@ typedef char FileName[_FILENAMESIZE_];
 
 #define _COLUMNWIDTH_ 24 /**< Must be at least _OUTPUTPRECISION_+8 for guaranteed fixed width columns */
 
+#define _MAXTITLESTRINGLENGTH_ 8000 /**< Maximum number of characters in title strings */
+
+#define _DELIMITER_ "\t" /**< character used for delimiting titles in the title strings */
+
+
+
 #ifndef __CLASSDIR__
 #define __CLASSDIR__ "." /**< The directory of CLASS. This is set to the absolute path to the CLASS directory so this is just a failsafe. */
 #endif
@@ -69,6 +77,7 @@ void class_protect_sprintf(char* dest, char* tpl,...);
 void class_protect_fprintf(FILE* dest, char* tpl,...);
 void* class_protect_memcpy(void* dest, void* from, size_t sz);
 
+int get_number_of_titles(char * titlestring);
 
 #define class_build_error_string(dest,tmpl,...) {                                                                \
   ErrorMsg FMsg;                                                                                                 \
@@ -233,14 +242,63 @@ void* class_protect_memcpy(void* dest, void* from, size_t sz);
       fprintf(file,"%*.*e ",_COLUMNWIDTH_,_OUTPUTPRECISION_,output);    \
   }
 
+#define class_fprintf_double_or_default(file,                           \
+                                        output,                         \
+                                        condition,                      \
+                                        defaultvalue){                  \
+    if (condition == _TRUE_)                                            \
+      fprintf(file,"%*.*e ",_COLUMNWIDTH_,_OUTPUTPRECISION_,output);    \
+    else                                                                \
+      fprintf(file,"%*.*e ",_COLUMNWIDTH_,_OUTPUTPRECISION_,defaultvalue);    \
+}
+
+#define class_fprintf_int(file,                                         \
+                          output,                                       \
+                          condition){                                   \
+    if (condition == _TRUE_)                                            \
+      fprintf(file,"%*d%*s ",                                           \
+              MAX(0,_COLUMNWIDTH_-_OUTPUTPRECISION_-5),                 \
+              output, _OUTPUTPRECISION_+5," ");                          \
+  }
+
 #define class_fprintf_columntitle(file,                                 \
                                   title,                                \
-                                  condition){                           \
+                                  condition,                            \
+                                  colnum){                              \
     if (condition == _TRUE_)                                            \
-      fprintf(file,"%*s%-*s ",\
-              MAX(0,MIN(_COLUMNWIDTH_-_OUTPUTPRECISION_-6,_COLUMNWIDTH_-((int) strlen(title)))), \
-              "",_OUTPUTPRECISION_+6,title);                            \
+      fprintf(file,"%*s%2d:%-*s ",                                      \
+              MAX(0,MIN(_COLUMNWIDTH_-_OUTPUTPRECISION_-6-3,_COLUMNWIDTH_-((int) strlen(title))-3)), \
+              "",colnum++,_OUTPUTPRECISION_+6,title);                   \
   }
+
+#define class_store_columntitle(titlestring,                            \
+				title,					\
+				condition){				\
+    if (condition == _TRUE_){                                           \
+      strcat(titlestring,title);                                        \
+      strcat(titlestring,_DELIMITER_);                                  \
+    }                                                                   \
+  }
+//,_MAXTITLESTRINGLENGTH_-strlen(titlestring)-1);
+
+#define class_store_double(storage,					\
+			   value,					\
+			   condition,                                   \
+                           dataindex){                                  \
+    if (condition == _TRUE_)                                            \
+      storage[dataindex++] = value;                                     \
+  }
+
+#define class_store_double_or_default(storage,                          \
+                                      value,                            \
+                                      condition,                        \
+                                      dataindex,                        \
+                                      defaultvalue){                    \
+    if (condition == _TRUE_)                                            \
+      storage[dataindex++] = value;                                     \
+    else                                                                \
+      storage[dataindex++] = defaultvalue;                              \
+}
 
 /** parameters related to the precision of the code and to the method of calculation */
 
@@ -264,6 +322,11 @@ enum pk_def {
   delta_bc_squared, /**< delta_bc includes contribution of baryons and cdm only to (delta rho) and to rho */
   delta_tot_from_poisson_squared /**< use delta_tot inferred from gravitational potential through Poisson equation */
 };
+/**
+ * Different ways to present output files
+ */
+
+enum file_format {class_format,camb_format};
 
 /**
  * All precision parameters.
@@ -312,6 +375,8 @@ struct precision
    * phase-space distribution during perturbation calculation
    */
   double tol_ncdm;
+  double tol_ncdm_newtonian;
+  double tol_ncdm_synchronous;
 
   /**
    * parameter controlling relative precision of integrals over ncdm
@@ -324,6 +389,11 @@ struct precision
    * initial time
    */
   double tol_ncdm_initial_w;
+
+  /**
+   * parameter controling the initial scalar field in background functions
+   */
+  double safe_phi_scf;
 
   //@}
 
@@ -368,25 +438,21 @@ struct precision
   double recfast_z_He_1;              /**< down to which redshift Helium fully ionized */
   double recfast_delta_z_He_1;        /**< z range over which transition is smoothed */
 
-  double recfast_z_He_2;              /**< down to which redshift first Helium recombination
-					   not complete */
+  double recfast_z_He_2;              /**< down to which redshift first Helium recombination not complete */
   double recfast_delta_z_He_2;        /**< z range over which transition is smoothed */
 
   double recfast_z_He_3;              /**< down to which redshift Helium singly ionized */
   double recfast_delta_z_He_3;        /**< z range over which transition is smoothed */
 
-  double recfast_x_He0_trigger;       /**< below which Helium ionization fraction start using
-                                           full equation for Helium */
+  double recfast_x_He0_trigger;       /**< value below which recfast uses the full equation for Helium */
   double recfast_x_He0_trigger2;      /**< a second threshold used in derivative routine */
   double recfast_x_He0_trigger_delta; /**< x_He range over which transition is smoothed */
 
-  double recfast_x_H0_trigger;        /**< below which Helium ionization fraction start using
-                                           full equation for Helium */
+  double recfast_x_H0_trigger;        /**< value below which recfast uses the full equation for Hydrogen */
   double recfast_x_H0_trigger2;       /**< a second threshold used in derivative routine */
   double recfast_x_H0_trigger_delta;  /**< x_H range over which transition is smoothed */
 
-  double recfast_H_frac;              /**< governs time at which full equation of evolution
-					   for Tmat is used */
+  double recfast_H_frac;              /**< governs time at which full equation of evolution for Tmat is used */
 
   FileName hyrec_Alpha_inf_file;
   FileName hyrec_R_inf_file;
@@ -456,6 +522,7 @@ struct precision
 
   int l_max_g;     /**< number of momenta in Boltzmann hierarchy for photon temperature (scalar), at least 4 */
   int l_max_pol_g; /**< number of momenta in Boltzmann hierarchy for photon polarisation (scalar), at least 4 */
+  int l_max_dr;   /**< number of momenta in Boltzmann hierarchy for decay radiation, at least 4 */
   int l_max_ur;   /**< number of momenta in Boltzmann hierarchy for relativistic neutrino/relics (scalar), at least 4 */
   int l_max_ncdm;   /**< number of momenta in Boltzmann hierarchy for relativistic neutrino/relics (scalar), at least 4 */
   int l_max_g_ten;     /**< number of momenta in Boltzmann hierarchy for photon temperature (tensor), at least 4 */
@@ -545,6 +612,12 @@ struct precision
   int primordial_inflation_attractor_maxit;
   double primordial_inflation_jump_initial;
   double primordial_inflation_tol_curvature;
+  double primordial_inflation_aH_ini_target;
+  double primordial_inflation_end_dphi;
+  double primordial_inflation_end_logstep;
+  double primordial_inflation_small_epsilon;
+  double primordial_inflation_small_epsilon_tol;
+  double primordial_inflation_extra_efolds;
 
   //@}
 

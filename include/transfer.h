@@ -134,7 +134,7 @@ struct transfers {
 
   //@{
 
-  int q_size; /**< number of wavenumber values */
+  size_t q_size; /**< number of wavenumber values */
 
   double * q;  /**< list of wavenumber values, q[index_q] */
 
@@ -540,14 +540,12 @@ extern "C" {
                          );
 
   int transfer_limber(
-                      int tau_size,
                       struct transfers * ptr,
+                      struct transfer_workspace * ptw,
                       int index_md,
                       int index_q,
                       double l,
                       double q,
-                      double * tau0_minus_tau,
-                      double * sources,
                       radial_function_type radial_type,
                       double * trsf
                       );
@@ -620,6 +618,10 @@ extern "C" {
                                     struct transfers * ptr,
                                     HyperInterpStruct *pHIS
                                     );
+
+  int transfer_global_selection_read(
+                                     struct transfers * ptr
+                                     );
 
   int transfer_workspace_init(
                               struct transfers * ptr,
